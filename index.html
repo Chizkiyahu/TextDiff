@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Text Comparison</title>
+  <style>
+    body {
+      background-color: #121212;
+      color: #E5E5E5;
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      box-sizing: border-box;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .container {
+      width: 100%;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 10px;
+    }
+    .notice {
+      text-align: center;
+      font-size: 14px;
+      margin-bottom: 10px;
+      color: #BB86FC;
+    }
+    .status {
+      font-size: 18px;
+      font-weight: bold;
+      margin-bottom: 10px;
+      text-align: center;
+    }
+    /* --- File Input Styling --- */
+    .file-input-container {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      margin-bottom: 10px;
+    }
+    .file-input-container label {
+      background-color: #BB86FC;
+      color: #121212;
+      padding: 10px 20px;
+      font-size: 16px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      display: inline-block;
+    }
+    .file-input-container input[type="file"] {
+      display: none;
+    }
+    .compare-switch-container {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .compare-button {
+      background-color: #BB86FC;
+      color: #121212;
+      padding: 10px 20px;
+      font-size: 16px;
+      border: none;
+      cursor: pointer;
+      border-radius: 5px;
+    }
+    .text-area-container {
+      display: flex;
+      gap: 10px;
+      flex: 1;
+    }
+    .text-area {
+      flex: 1;
+      background: #1E1E1E;
+      border: 1px solid #444;
+      padding: 10px;
+      font-size: 16px;
+      overflow: auto;
+      white-space: pre-wrap;
+      height: 100%;
+    }
+    .added {
+      background-color: #FF5252;
+    }
+    .removed {
+      background-color: #03DAC6;
+    }
+    /* --- Progress Bar Styling --- */
+    #progressContainer {
+      display: none;
+      margin: 10px auto;
+      width: 80%;
+      background-color: #444;
+      border-radius: 5px;
+      overflow: hidden;
+    }
+    #progressBar {
+      width: 0%;
+      height: 20px;
+      background-color: #BB86FC;
+      transition: width 0.05s;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Text Comparison Tool</h1>
+      <div class="notice">
+        🔒 This tool runs completely on your device. No data is uploaded or sent to any server. Your privacy is 100% protected.
+      </div>
+      <div id="status" class="status">Enter text</div>
+    </div>
+    <div class="file-input-container">
+      <label for="fileInput1">Choose file for Text 1</label>
+      <input type="file" id="fileInput1" />
+      <label for="fileInput2">Choose file for Text 2</label>
+      <input type="file" id="fileInput2" />
+    </div>
+    <div class="compare-switch-container">
+      <button id="compareBtn" class="compare-button">Compare</button>
+      <button id="switchBtn" class="compare-button">Switch Texts</button>
+    </div>
+    <!-- Progress Bar -->
+    <div id="progressContainer">
+      <div id="progressBar"></div>
+    </div>
+    <div class="text-area-container">
+      <div id="text1" class="text-area" contenteditable="true"></div>
+      <div id="text2" class="text-area" contenteditable="true"></div>
+    </div>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/diff@5.1.0/dist/diff.min.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const textArea1 = document.getElementById("text1");
+      const textArea2 = document.getElementById("text2");
+      const fileInput1 = document.getElementById("fileInput1");
+      const fileInput2 = document.getElementById("fileInput2");
+      const switchBtn = document.getElementById("switchBtn");
+      const compareBtn = document.getElementById("compareBtn");
+      const status = document.getElementById("status");
+      const progressContainer = document.getElementById("progressContainer");
+      const progressBar = document.getElementById("progressBar");
+
+      function handleFileUpload(input, textArea) {
+        const file = input.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            textArea.innerText = e.target.result;
+          };
+          reader.readAsText(file);
+        }
+      }
+
+      fileInput1.addEventListener("change", () => handleFileUpload(fileInput1, textArea1));
+      fileInput2.addEventListener("change", () => handleFileUpload(fileInput2, textArea2));
+
+      switchBtn.addEventListener("click", () => {
+        const tempText = textArea1.innerText;
+        textArea1.innerText = textArea2.innerText;
+        textArea2.innerText = tempText;
+      });
+
+      function startProgressBar(callback) {
+        progressContainer.style.display = "block";
+        progressBar.style.width = "0%";
+        let progress = 0;
+        const interval = setInterval(() => {
+          progress += 5;
+          progressBar.style.width = progress + "%";
+          if (progress >= 100) {
+            clearInterval(interval);
+            progressContainer.style.display = "none";
+            callback();
+          }
+        }, 50);
+      }
+
+      compareBtn.addEventListener("click", () => {
+        // Disable editing while comparing
+        textArea1.setAttribute("contenteditable", "false");
+        textArea2.setAttribute("contenteditable", "false");
+
+        startProgressBar(() => {
+          // Compute the word diff between the two texts
+          const diff = Diff.diffWords(textArea1.innerText, textArea2.innerText);
+          let leftHTML = "";
+          let rightHTML = "";
+          let hasDiff = false;
+
+          diff.forEach(part => {
+            if (part.added) {
+              rightHTML += `<span class="added">${part.value}</span>`;
+              hasDiff = true;
+            } else if (part.removed) {
+              leftHTML += `<span class="removed">${part.value}</span>`;
+              hasDiff = true;
+            } else {
+              leftHTML += part.value;
+              rightHTML += part.value;
+            }
+          });
+
+          // Update the text areas with highlighted differences
+          textArea1.innerHTML = leftHTML;
+          textArea2.innerHTML = rightHTML;
+          status.innerText = hasDiff ? "Differences found" : "Identical";
+
+          // Re-enable editing after diff is shown
+          textArea1.setAttribute("contenteditable", "true");
+          textArea2.setAttribute("contenteditable", "true");
+        });
+      });
+    });
+  </script>
+</body>
+</html>
