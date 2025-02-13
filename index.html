@@ -2,10 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Text Comparison</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Text Comparison – Large Files with Line Numbers</title>
   <style>
     body {
+      /* Keep your existing dark background or change to GitHub dark (#0d1117). */
       background-color: #121212;
       color: #E5E5E5;
       font-family: Arial, sans-serif;
@@ -18,7 +19,6 @@
     }
     .container {
       width: 100%;
-      box-sizing: border-box;
       display: flex;
       flex-direction: column;
       height: 100%;
@@ -45,6 +45,7 @@
       gap: 10px;
       justify-content: center;
       margin-bottom: 10px;
+      align-items: center;
     }
     .file-input-container label {
       background-color: #BB86FC;
@@ -59,6 +60,7 @@
     .file-input-container input[type="file"] {
       display: none;
     }
+    /* --- Compare, Switch & Clear Buttons --- */
     .compare-switch-container {
       display: flex;
       justify-content: center;
@@ -74,28 +76,64 @@
       cursor: pointer;
       border-radius: 5px;
     }
+    /* --- Editor with Line Numbers --- */
     .text-area-container {
       display: flex;
       gap: 10px;
       flex: 1;
+      overflow: hidden;
+    }
+    .editor {
+      position: relative;
+      flex: 1;
+      display: flex;
+      border: 1px solid #444;
+      background: #1E1E1E;
+      overflow: hidden;
+    }
+    .line-numbers {
+      background-color: #2C2C2C;
+      color: #888;
+      text-align: right;
+      padding: 5px 5px;
+      font-size: 14px;
+      line-height: 1.4;
+      user-select: none;
+      overflow: hidden;
     }
     .text-area {
       flex: 1;
-      background: #1E1E1E;
-      border: 1px solid #444;
-      padding: 10px;
+      padding: 5px 10px;
       font-size: 16px;
       overflow: auto;
       white-space: pre-wrap;
-      height: 100%;
+      outline: none;
     }
+
+    /*
+     * --- GitHub Dark-Mode Style for Added & Removed Lines ---
+     *
+     * These colors approximate the background tints GitHub uses for code diffs
+     * in dark mode. Adjust if you want them lighter/darker.
+     */
     .added {
-      background-color: #FF5252;
+      /* Dark green background for additions */
+      background-color: #044a18;  /* GitHub dark addition area */
+      color: #adbac7;            /* GitHub dark text color */
+      border-left: 3px solid #2ea043; /* Green border strip on the left */
+      display: block;
+      padding-left: 8px;
     }
     .removed {
-      background-color: #03DAC6;
+      /* Dark red background for deletions */
+      background-color: #4a0416;  /* GitHub dark removal area */
+      color: #adbac7;            /* GitHub dark text color */
+      border-left: 3px solid #f85149; /* Red border strip on the left */
+      display: block;
+      padding-left: 8px;
     }
-    /* --- Progress Bar Styling --- */
+
+    /* --- Progress Bar --- */
     #progressContainer {
       display: none;
       margin: 10px auto;
@@ -108,7 +146,7 @@
       width: 0%;
       height: 20px;
       background-color: #BB86FC;
-      transition: width 0.05s;
+      transition: width 0.1s;
     }
   </style>
 </head>
@@ -117,112 +155,244 @@
     <div class="header">
       <h1>Text Comparison Tool</h1>
       <div class="notice">
-        🔒 This tool runs completely on your device. No data is uploaded or sent to any server. Your privacy is 100% protected.
+        🔒 This tool runs completely on your device. No data is uploaded. Your privacy is 100% protected.
       </div>
       <div id="status" class="status">Enter text</div>
     </div>
+    <!-- File inputs with Switch button in between -->
     <div class="file-input-container">
       <label for="fileInput1">Choose file for Text 1</label>
       <input type="file" id="fileInput1" />
+      <button id="switchBtn" class="compare-button">Switch Texts</button>
       <label for="fileInput2">Choose file for Text 2</label>
       <input type="file" id="fileInput2" />
     </div>
+    <!-- Compare and Clear buttons -->
     <div class="compare-switch-container">
       <button id="compareBtn" class="compare-button">Compare</button>
-      <button id="switchBtn" class="compare-button">Switch Texts</button>
+      <button id="clearBtn" class="compare-button">Clear Format</button>
     </div>
     <!-- Progress Bar -->
     <div id="progressContainer">
       <div id="progressBar"></div>
     </div>
+    <!-- Editors with Line Numbers -->
     <div class="text-area-container">
-      <div id="text1" class="text-area" contenteditable="true"></div>
-      <div id="text2" class="text-area" contenteditable="true"></div>
+      <div class="editor">
+        <div class="line-numbers" id="lineNumbers1">1<br></div>
+        <div id="text1" class="text-area" contenteditable="true"></div>
+      </div>
+      <div class="editor">
+        <div class="line-numbers" id="lineNumbers2">1<br></div>
+        <div id="text2" class="text-area" contenteditable="true"></div>
+      </div>
     </div>
   </div>
-  <script src="https://cdn.jsdelivr.net/npm/diff@5.1.0/dist/diff.min.js"></script>
+
   <script>
-    document.addEventListener("DOMContentLoaded", () => {
-      const textArea1 = document.getElementById("text1");
-      const textArea2 = document.getElementById("text2");
-      const fileInput1 = document.getElementById("fileInput1");
-      const fileInput2 = document.getElementById("fileInput2");
-      const switchBtn = document.getElementById("switchBtn");
-      const compareBtn = document.getElementById("compareBtn");
-      const status = document.getElementById("status");
-      const progressContainer = document.getElementById("progressContainer");
-      const progressBar = document.getElementById("progressBar");
+    // Update line numbers based on the text content
+    function updateLineNumbers(textArea, lineNumbersElement) {
+      const lines = textArea.innerText.split('\n').length;
+      let numbersHTML = "";
+      for (let i = 1; i <= lines; i++) {
+        numbersHTML += i + "<br>";
+      }
+      lineNumbersElement.innerHTML = numbersHTML;
+    }
 
-      function handleFileUpload(input, textArea) {
-        const file = input.files[0];
-        if (file) {
-          const reader = new FileReader();
-          reader.onload = (e) => {
-            textArea.innerText = e.target.result;
-          };
-          reader.readAsText(file);
+    // Sync scrolling of the line numbers with the text area
+    function syncScroll(textArea, lineNumbersElement) {
+      lineNumbersElement.scrollTop = textArea.scrollTop;
+    }
+
+    // Update both editors' line numbers
+    function updateAllLineNumbers() {
+      updateLineNumbers(textArea1, lineNumbers1);
+      updateLineNumbers(textArea2, lineNumbers2);
+    }
+
+    // Worker code for file reading and diffing (using diffLines for performance)
+    const workerCode = `
+      importScripts('https://cdn.jsdelivr.net/npm/diff@5.1.0/dist/diff.min.js');
+
+      async function readFile(file, progressCallback) {
+        const decoder = new TextDecoder("utf-8");
+        const stream = file.stream();
+        let result = "";
+        const reader = stream.getReader();
+        let bytesRead = 0;
+        const total = file.size;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          bytesRead += value.length;
+          if (progressCallback) progressCallback(bytesRead / total);
+          result += decoder.decode(value, { stream: true });
         }
+        result += decoder.decode();
+        return result;
       }
 
-      fileInput1.addEventListener("change", () => handleFileUpload(fileInput1, textArea1));
-      fileInput2.addEventListener("change", () => handleFileUpload(fileInput2, textArea2));
+      self.onmessage = async function(e) {
+        const { file1, file2, text1, text2 } = e.data;
+        let progress1 = 1, progress2 = 1;
+        function updateOverallProgress() {
+          const overall = ((progress1 + progress2) / 2) * 100;
+          self.postMessage({ type: 'progress', progress: overall });
+        }
 
-      switchBtn.addEventListener("click", () => {
-        const tempText = textArea1.innerText;
-        textArea1.innerText = textArea2.innerText;
-        textArea2.innerText = tempText;
-      });
+        let content1 = "";
+        let content2 = "";
+        if (file1) {
+          progress1 = 0;
+          content1 = await readFile(file1, (p) => { progress1 = p; updateOverallProgress(); });
+        } else {
+          content1 = text1 || "";
+        }
+        if (file2) {
+          progress2 = 0;
+          content2 = await readFile(file2, (p) => { progress2 = p; updateOverallProgress(); });
+        } else {
+          content2 = text2 || "";
+        }
 
-      function startProgressBar(callback) {
-        progressContainer.style.display = "block";
-        progressBar.style.width = "0%";
-        let progress = 0;
-        const interval = setInterval(() => {
-          progress += 5;
-          progressBar.style.width = progress + "%";
-          if (progress >= 100) {
-            clearInterval(interval);
-            progressContainer.style.display = "none";
-            callback();
+        const diffResult = Diff.diffLines(content1, content2);
+        let leftHTML = "";
+        let rightHTML = "";
+        let hasDiff = false;
+        diffResult.forEach(part => {
+          if (part.added) {
+            rightHTML += \`<span class="added">\${part.value}</span>\`;
+            hasDiff = true;
+          } else if (part.removed) {
+            leftHTML += \`<span class="removed">\${part.value}</span>\`;
+            hasDiff = true;
+          } else {
+            leftHTML += part.value;
+            rightHTML += part.value;
           }
-        }, 50);
-      }
-
-      compareBtn.addEventListener("click", () => {
-        // Disable editing while comparing
-        textArea1.setAttribute("contenteditable", "false");
-        textArea2.setAttribute("contenteditable", "false");
-
-        startProgressBar(() => {
-          // Compute the word diff between the two texts
-          const diff = Diff.diffWords(textArea1.innerText, textArea2.innerText);
-          let leftHTML = "";
-          let rightHTML = "";
-          let hasDiff = false;
-
-          diff.forEach(part => {
-            if (part.added) {
-              rightHTML += `<span class="added">${part.value}</span>`;
-              hasDiff = true;
-            } else if (part.removed) {
-              leftHTML += `<span class="removed">${part.value}</span>`;
-              hasDiff = true;
-            } else {
-              leftHTML += part.value;
-              rightHTML += part.value;
-            }
-          });
-
-          // Update the text areas with highlighted differences
-          textArea1.innerHTML = leftHTML;
-          textArea2.innerHTML = rightHTML;
-          status.innerText = hasDiff ? "Differences found" : "Identical";
-
-          // Re-enable editing after diff is shown
-          textArea1.setAttribute("contenteditable", "true");
-          textArea2.setAttribute("contenteditable", "true");
         });
-      });
+        self.postMessage({ type: 'result', leftHTML, rightHTML, hasDiff });
+      };
+    `;
+
+    // Create a Web Worker from the code.
+    const blob = new Blob([workerCode], { type: 'application/javascript' });
+    const worker = new Worker(URL.createObjectURL(blob));
+
+    // Grab references to UI elements.
+    const textArea1 = document.getElementById("text1");
+    const textArea2 = document.getElementById("text2");
+    const lineNumbers1 = document.getElementById("lineNumbers1");
+    const lineNumbers2 = document.getElementById("lineNumbers2");
+    const fileInput1 = document.getElementById("fileInput1");
+    const fileInput2 = document.getElementById("fileInput2");
+    const switchBtn = document.getElementById("switchBtn");
+    const compareBtn = document.getElementById("compareBtn");
+    const clearBtn = document.getElementById("clearBtn");
+    const status = document.getElementById("status");
+    const progressContainer = document.getElementById("progressContainer");
+    const progressBar = document.getElementById("progressBar");
+
+    // Update line numbers on input and scroll.
+    textArea1.addEventListener("input", () => updateLineNumbers(textArea1, lineNumbers1));
+    textArea2.addEventListener("input", () => updateLineNumbers(textArea2, lineNumbers2));
+    textArea1.addEventListener("scroll", () => syncScroll(textArea1, lineNumbers1));
+    textArea2.addEventListener("scroll", () => syncScroll(textArea2, lineNumbers2));
+
+    // Store file objects.
+    let fileObj1 = null;
+    let fileObj2 = null;
+
+    // When a file is chosen, load the full file content.
+    fileInput1.addEventListener("change", () => {
+      fileObj1 = fileInput1.files[0];
+      if (fileObj1) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          textArea1.innerText = e.target.result;
+          updateLineNumbers(textArea1, lineNumbers1);
+        };
+        reader.readAsText(fileObj1);
+      }
+    });
+    fileInput2.addEventListener("change", () => {
+      fileObj2 = fileInput2.files[0];
+      if (fileObj2) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          textArea2.innerText = e.target.result;
+          updateLineNumbers(textArea2, lineNumbers2);
+        };
+        reader.readAsText(fileObj2);
+      }
+    });
+
+    // Switch texts (and their associated file objects).
+    switchBtn.addEventListener("click", () => {
+      [fileObj1, fileObj2] = [fileObj2, fileObj1];
+      const tempText = textArea1.innerText;
+      textArea1.innerText = textArea2.innerText;
+      textArea2.innerText = tempText;
+      updateAllLineNumbers();
+    });
+
+    // Update progress bar.
+    function setProgress(progress) {
+      progressContainer.style.display = "block";
+      progressBar.style.width = progress + "%";
+      if (progress >= 100) {
+        setTimeout(() => {
+          progressContainer.style.display = "none";
+        }, 500);
+      }
+    }
+
+    // Listen for messages from the worker.
+    worker.onmessage = function(e) {
+      const data = e.data;
+      if (data.type === 'progress') {
+        setProgress(data.progress);
+      } else if (data.type === 'result') {
+        textArea1.innerHTML = data.leftHTML;
+        textArea2.innerHTML = data.rightHTML;
+        if (data.hasDiff) {
+          status.innerText = "Differences found";
+          status.style.color = "#FFA500"; // Orange
+        } else {
+          status.innerText = "Identical";
+          status.style.color = "#00E676"; // Or any "success" color you like
+        }
+        // Re-enable editing.
+        textArea1.setAttribute("contenteditable", "true");
+        textArea2.setAttribute("contenteditable", "true");
+        // Update line numbers after diff highlighting.
+        updateAllLineNumbers();
+      }
+    };
+
+    // Compare: disable editing, show progress, then post message to worker.
+    compareBtn.addEventListener("click", () => {
+      textArea1.setAttribute("contenteditable", "false");
+      textArea2.setAttribute("contenteditable", "false");
+      status.innerText = "Comparing...";
+      status.style.color = "#BB86FC";
+      const payload = {
+        file1: fileObj1,
+        file2: fileObj2,
+        text1: fileObj1 ? null : textArea1.innerText,
+        text2: fileObj2 ? null : textArea2.innerText
+      };
+      worker.postMessage(payload);
+    });
+
+    // Clear Format: remove diff highlighting.
+    clearBtn.addEventListener("click", () => {
+      textArea1.innerHTML = textArea1.innerText;
+      textArea2.innerHTML = textArea2.innerText;
+      status.innerText = "Format cleared";
+      status.style.color = "#BB86FC";
+      updateAllLineNumbers();
     });
   </script>
 </body>
